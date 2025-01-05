@@ -18,45 +18,44 @@ public class FinanceController {
 
     // Регистрация нового пользователя
     @PostMapping("/register")
-    public User register(@RequestParam String login, @RequestParam String password) {
-        return financeService.registerUser(login, password);
+    public RegisterResponse register(@RequestParam String login, @RequestParam String password) {
+        User user = financeService.registerUser(login, password);
+        return new RegisterResponse(user.getLogin(), user.getPassword());
     }
-
-    // "Авторизация" (упрощённая, без Spring Security)
-    @PostMapping("/login")
-    public User login(@RequestParam String login, @RequestParam String password) {
-        return financeService.login(login, password);
-    }
-
+    
     // Добавить доход / расход
-    @PostMapping("/users/{userId}/transactions")
-    public Transaction addTransaction(@PathVariable Long userId,
+    @PostMapping("/transactions")
+    public Transaction addTransaction(@RequestHeader("X-User-Login") String login,
+                                      @RequestHeader("X-User-Password") String password,
                                       @RequestParam String type,
                                       @RequestParam String category,
                                       @RequestParam double amount) {
-        return financeService.addTransaction(userId, type, category, amount);
+        return financeService.addTransaction(login, password, type, category, amount);
     }
 
     // Установить (обновить) бюджет по категории
-    @PostMapping("/users/{userId}/budget")
-    public Budget setBudget(@PathVariable Long userId,
+    @PostMapping("/budget")
+    public Budget setBudget(@RequestHeader("X-User-Login") String login,
+                            @RequestHeader("X-User-Password") String password,
                             @RequestParam String category,
                             @RequestParam double amount) {
-        return financeService.setBudget(userId, category, amount);
+        return financeService.setBudget(login, password, category, amount);
     }
 
     // Получить общую статистику
-    @GetMapping("/users/{userId}/stats")
-    public String getStats(@PathVariable Long userId) {
-        return financeService.getStats(userId);
+    @GetMapping("/stats")
+    public String getStats(@RequestHeader("X-User-Login") String login,
+                           @RequestHeader("X-User-Password") String password) {
+        return financeService.getStats(login, password);
     }
 
     // Перевод между пользователями
-    @PostMapping("/users/{fromUserId}/transfer")
-    public String transfer(@PathVariable Long fromUserId,
+    @PostMapping("/transfer")
+    public String transfer(@RequestHeader("X-User-Login") String login,
+                           @RequestHeader("X-User-Password") String password,
                            @RequestParam String toLogin,
                            @RequestParam double amount) {
-        financeService.transfer(fromUserId, toLogin, amount);
+        financeService.transfer(login, password, toLogin, amount);
         return "Перевод выполнен!";
     }
 }

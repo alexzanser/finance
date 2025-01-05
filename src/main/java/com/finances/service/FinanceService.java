@@ -28,10 +28,16 @@ public class FinanceService {
         this.walletRepository = walletRepository;
     }
 
+    // Проверка авторизации
+    private User authorize(String login, String password) {
+        return userRepository.findByLogin(login)
+                .filter(u -> u.getPassword().equals(password))
+                .orElseThrow(() -> new ClientException("Неверный логин или пароль!"));
+    }
+
     // Регистрация пользователя
     @Transactional
     public User registerUser(String login, String password) {
-        // Проверка, не занят ли логин
         if (userRepository.findByLogin(login).isPresent()) {
             throw new ClientException("Логин уже занят!");
         }
@@ -39,25 +45,15 @@ public class FinanceService {
         Wallet wallet = new Wallet(user);
         user.setWallet(wallet);
 
-        // Сохраняем пользователя (каскадом сохранится и кошелёк)
         return userRepository.save(user);
-    }
-
-    // Авторизация (проверяем логин/пароль)
-    public User login(String login, String password) {
-        return userRepository.findByLogin(login)
-                .filter(u -> u.getPassword().equals(password))
-                .orElseThrow(() -> new ClientException("Неверный логин или пароль!"));
     }
 
     // Добавление дохода/расхода
     @Transactional
-    public Transaction addTransaction(Long userId, String type, String category, double amount) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ClientException("Пользователь не найден."));
+    public Transaction addTransaction(String userLogin, String userPassword, String type, String category, double amount) {
+        User user = authorize(userLogin, userPassword);
         Wallet wallet = user.getWallet();
 
-        // Проверка: не превышают ли расходы доход?
         if ("expense".equalsIgnoreCase(type)) {
             double totalIncome = getTotalIncome(wallet);
             double totalExpenses = getTotalExpenses(wallet) + amount;
@@ -65,7 +61,6 @@ public class FinanceService {
                 throw new ClientException("Расходы превышают доходы!");
             }
 
-            // Проверка бюджета по категории
             Budget budget = wallet.getBudgets().stream()
                     .filter(b -> b.getCategory().equalsIgnoreCase(category))
                     .findFirst().orElse(null);
@@ -77,19 +72,16 @@ public class FinanceService {
             }
         }
 
-        // Создаём транзакцию
         Transaction tx = new Transaction(type, category, amount);
         wallet.addTransaction(tx);
-        // save(wallet) каскадно сохранит и транзакцию
         walletRepository.save(wallet);
         return tx;
     }
 
-    // Установить (или обновить) бюджет для категории
+    // Установить бюджет
     @Transactional
-    public Budget setBudget(Long userId, String category, double limit) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ClientException("Пользователь не найден."));
+    public Budget setBudget(String userLogin, String userPassword, String category, double limit) {
+        User user = authorize(userLogin, userPassword);
         Wallet wallet = user.getWallet();
 
         Optional<Budget> existing = wallet.getBudgets().stream()
@@ -109,36 +101,10 @@ public class FinanceService {
         return budget;
     }
 
-    // Подсчитать общий доход
-    public double getTotalIncome(Wallet wallet) {
-        return wallet.getTransactions().stream()
-                .filter(t -> "income".equalsIgnoreCase(t.getType()))
-                .mapToDouble(Transaction::getAmount)
-                .sum();
-    }
-
-    // Подсчитать общий расход
-    public double getTotalExpenses(Wallet wallet) {
-        return wallet.getTransactions().stream()
-                .filter(t -> "expense".equalsIgnoreCase(t.getType()))
-                .mapToDouble(Transaction::getAmount)
-                .sum();
-    }
-
-    // Расход по категории
-    public double getExpenseByCategory(Wallet wallet, String category) {
-        return wallet.getTransactions().stream()
-                .filter(t -> "expense".equalsIgnoreCase(t.getType()))
-                .filter(t -> t.getCategory().equalsIgnoreCase(category))
-                .mapToDouble(Transaction::getAmount)
-                .sum();
-    }
-
     // Перевод между пользователями
     @Transactional
-    public void transfer(Long fromUserId, String toLogin, double amount) {
-        User fromUser = userRepository.findById(fromUserId)
-                .orElseThrow(() -> new ClientException("Отправитель не найден."));
+    public void transfer(String userLogin, String userPassword, String toLogin, double amount) {
+        User fromUser = authorize(userLogin, userPassword);
         User toUser = userRepository.findByLogin(toLogin)
                 .orElseThrow(() -> new ClientException("Получатель не найден."));
 
@@ -147,11 +113,9 @@ public class FinanceService {
             throw new ClientException("Недостаточно средств для перевода!");
         }
 
-        // Списываем у отправителя
         Transaction expenseTx = new Transaction("expense", "Перевод->" + toUser.getLogin(), amount);
         fromUser.getWallet().addTransaction(expenseTx);
 
-        // Зачисляем получателю
         Transaction incomeTx = new Transaction("income", "Перевод от " + fromUser.getLogin(), amount);
         toUser.getWallet().addTransaction(incomeTx);
 
@@ -159,10 +123,9 @@ public class FinanceService {
         walletRepository.save(toUser.getWallet());
     }
 
-    // Пример получения "текстовой" статистики
-    public String getStats(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ClientException("Пользователь не найден."));
+    // Получение статистики
+    public String getStats(String userLogin, String userPassword) {
+        User user = authorize(userLogin, userPassword);
         Wallet wallet = user.getWallet();
 
         double totalIncome = getTotalIncome(wallet);
@@ -188,5 +151,27 @@ public class FinanceService {
                     b.getCategory(), b.getAmount(), spent, remaining));
         }
         return sb.toString();
+    }
+
+    private double getTotalIncome(Wallet wallet) {
+        return wallet.getTransactions().stream()
+                .filter(t -> "income".equalsIgnoreCase(t.getType()))
+                .mapToDouble(Transaction::getAmount)
+                .sum();
+    }
+
+    private double getTotalExpenses(Wallet wallet) {
+        return wallet.getTransactions().stream()
+                .filter(t -> "expense".equalsIgnoreCase(t.getType()))
+                .mapToDouble(Transaction::getAmount)
+                .sum();
+    }
+
+    private double getExpenseByCategory(Wallet wallet, String category) {
+        return wallet.getTransactions().stream()
+                .filter(t -> "expense".equalsIgnoreCase(t.getType()))
+                .filter(t -> t.getCategory().equalsIgnoreCase(category))
+                .mapToDouble(Transaction::getAmount)
+                .sum();
     }
 }
