@@ -9,9 +9,12 @@ import com.finances.repository.BudgetRepository;
 import com.finances.repository.TransactionRepository;
 import com.finances.repository.UserRepository;
 import com.finances.repository.WalletRepository;
+import com.google.gson.Gson;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -131,26 +134,35 @@ public class FinanceService {
         double totalIncome = getTotalIncome(wallet);
         double totalExpenses = getTotalExpenses(wallet);
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("Пользователь: ").append(user.getLogin()).append("\n");
-        sb.append("Общий доход: ").append(totalIncome).append("\n");
-        sb.append("Общие расходы: ").append(totalExpenses).append("\n\n");
+        // Create a map to hold the response data
+        Map<String, Object> response = new HashMap<>();
+        response.put("user", user.getLogin());
+        response.put("totalIncome", totalIncome);
+        response.put("totalExpenses", totalExpenses);
 
-        sb.append("Доходы по категориям:\n");
+        // Income by category
+        Map<String, Double> incomeByCategory = new HashMap<>();
         wallet.getTransactions().stream()
                 .filter(t -> "income".equalsIgnoreCase(t.getType()))
-                .forEach(t -> sb.append("  ").append(t.getCategory())
-                        .append(": ").append(t.getAmount()).append("\n"));
-        sb.append("\n");
+                .forEach(t -> incomeByCategory.put(t.getCategory(), t.getAmount()));
+        response.put("incomeByCategory", incomeByCategory);
 
-        sb.append("Бюджеты:\n");
+        // Budgets information
+        Map<String, Object> budgets = new HashMap<>();
         for (Budget b : wallet.getBudgets()) {
             double spent = getExpenseByCategory(wallet, b.getCategory());
             double remaining = b.getAmount() - spent;
-            sb.append(String.format("  %s: лимит=%.2f, потрачено=%.2f, остаток=%.2f\n",
-                    b.getCategory(), b.getAmount(), spent, remaining));
+            Map<String, Double> budgetInfo = new HashMap<>();
+            budgetInfo.put("limit", b.getAmount());
+            budgetInfo.put("spent", spent);
+            budgetInfo.put("remaining", remaining);
+            budgets.put(b.getCategory(), budgetInfo);
         }
-        return sb.toString();
+        response.put("budgets", budgets);
+
+        // Convert the map to a JSON string using Gson
+        Gson gson = new Gson();
+        return gson.toJson(response);
     }
 
     private double getTotalIncome(Wallet wallet) {
