@@ -42,13 +42,13 @@ curl --location --request POST 'http://localhost:8080/api/budget?category=%3Cstr
         "amount": "<double>",
         "date": "<dateTime>",
         "wallet": {
-          "value": "<Circular reference to #/components/schemas/Wallet detected>"
+          "value": "<string>"
         }
       }
     ],
     "budgets": [
       {
-        "value": "<Circular reference to #/components/schemas/Budget detected>"
+        "value": "<string>"
       }
     ]
   }
@@ -120,7 +120,7 @@ curl --location --request POST 'http://localhost:8080/api/transactions?type=Expe
   "amount": "<double>",
   "date": "<dateTime>",
   "wallet": {
-    "value": "<Circular reference to #/components/schemas/Wallet detected>"
+    "value": "<string>"
   }
 }
 ```
