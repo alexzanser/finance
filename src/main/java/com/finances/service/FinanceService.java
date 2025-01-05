@@ -1,5 +1,6 @@
 package com.finances.service;
 
+import com.finances.exception.ClientException;
 import com.finances.model.Budget;
 import com.finances.model.Transaction;
 import com.finances.model.User;
@@ -32,7 +33,7 @@ public class FinanceService {
     public User registerUser(String login, String password) {
         // Проверка, не занят ли логин
         if (userRepository.findByLogin(login).isPresent()) {
-            throw new RuntimeException("Логин уже занят!");
+            throw new ClientException("Логин уже занят!");
         }
         User user = new User(login, password);
         Wallet wallet = new Wallet(user);
@@ -46,14 +47,14 @@ public class FinanceService {
     public User login(String login, String password) {
         return userRepository.findByLogin(login)
                 .filter(u -> u.getPassword().equals(password))
-                .orElseThrow(() -> new RuntimeException("Неверный логин или пароль!"));
+                .orElseThrow(() -> new ClientException("Неверный логин или пароль!"));
     }
 
     // Добавление дохода/расхода
     @Transactional
     public Transaction addTransaction(Long userId, String type, String category, double amount) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден."));
+                .orElseThrow(() -> new ClientException("Пользователь не найден."));
         Wallet wallet = user.getWallet();
 
         // Проверка: не превышают ли расходы доход?
@@ -61,7 +62,7 @@ public class FinanceService {
             double totalIncome = getTotalIncome(wallet);
             double totalExpenses = getTotalExpenses(wallet) + amount;
             if (totalExpenses > totalIncome) {
-                System.out.println("ВНИМАНИЕ: расходы превысят доходы!");
+                throw new ClientException("Расходы превышают доходы!");
             }
 
             // Проверка бюджета по категории
@@ -71,7 +72,7 @@ public class FinanceService {
             if (budget != null) {
                 double spentAlready = getExpenseByCategory(wallet, category);
                 if ((spentAlready + amount) > budget.getAmount()) {
-                    System.out.println("ВНИМАНИЕ: Лимит по категории \"" + category + "\" будет превышен!");
+                    throw new ClientException("Лимит по категории \"" + category + "\" будет превышен!");
                 }
             }
         }
@@ -88,7 +89,7 @@ public class FinanceService {
     @Transactional
     public Budget setBudget(Long userId, String category, double limit) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден."));
+                .orElseThrow(() -> new ClientException("Пользователь не найден."));
         Wallet wallet = user.getWallet();
 
         Optional<Budget> existing = wallet.getBudgets().stream()
@@ -137,13 +138,13 @@ public class FinanceService {
     @Transactional
     public void transfer(Long fromUserId, String toLogin, double amount) {
         User fromUser = userRepository.findById(fromUserId)
-                .orElseThrow(() -> new RuntimeException("Отправитель не найден."));
+                .orElseThrow(() -> new ClientException("Отправитель не найден."));
         User toUser = userRepository.findByLogin(toLogin)
-                .orElseThrow(() -> new RuntimeException("Получатель не найден."));
+                .orElseThrow(() -> new ClientException("Получатель не найден."));
 
         double balance = getTotalIncome(fromUser.getWallet()) - getTotalExpenses(fromUser.getWallet());
         if (amount > balance) {
-            throw new RuntimeException("Недостаточно средств для перевода!");
+            throw new ClientException("Недостаточно средств для перевода!");
         }
 
         // Списываем у отправителя
@@ -161,7 +162,7 @@ public class FinanceService {
     // Пример получения "текстовой" статистики
     public String getStats(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден."));
+                .orElseThrow(() -> new ClientException("Пользователь не найден."));
         Wallet wallet = user.getWallet();
 
         double totalIncome = getTotalIncome(wallet);
