@@ -31,7 +31,7 @@ curl --location --request POST 'http://localhost:8080/api/budget?category=%3Cstr
       "login": "<string>",
       "password": "<string>",
       "wallet": {
-        "value": "<Circular reference to #/components/schemas/Wallet detected>"
+        "value": "<string>"
       }
     },
     "transactions": [
